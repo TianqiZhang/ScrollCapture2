@@ -12,6 +12,14 @@
   "background": {
     "service_worker": "background.js"
   },
+  "commands": {
+    "start-capture": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S"
+      },
+      "description": "Start area capture"
+    }
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
