@@ -9,6 +9,9 @@
     "scripting",
     "offscreen"
   ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -32,7 +35,8 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "css": ["content.css"]
+      "css": ["content.css"],
+      "all_frames": true
     }
   ],
   "icons": {
