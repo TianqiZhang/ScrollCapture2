@@ -106,7 +106,7 @@ async function startScrollCapture(rect) {
 
     // Create a scroll container overlay
     const scrollContainer = document.createElement('div');
-    scrollContainer.className = 'scroll-container';
+    scrollContainer.className = 'scroll-container hide-for-capture';
     scrollContainer.style.left = rect.left + 'px';
     scrollContainer.style.top = rect.top + 'px';
     scrollContainer.style.width = rect.width + 'px';
@@ -126,13 +126,19 @@ async function startScrollCapture(rect) {
     let currentScroll = 0;
     const scrollStep = Math.floor(rect.height * (1 - captureConfig.overlap));
 
+    // Capture initial frame before starting to scroll
+    await captureFrame(rect);
+
     const simulateScroll = async () => {
         if (!isCapturing) {
             cleanup();
             return;
         }
 
-        // Directly scroll the window
+        // Wait a bit before scrolling to ensure any previous animations have finished
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Scroll
         if (captureConfig.direction === 'vertical') {
             window.scrollBy({
                 top: scrollStep,
@@ -145,10 +151,37 @@ async function startScrollCapture(rect) {
             });
         }
 
-        // Wait for scroll animation to complete
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait for scroll animation and any dynamic content to settle
+        await new Promise(resolve => {
+            let scrollEndDetected = false;
+            
+            const checkScroll = () => {
+                if (document.documentElement.classList.contains('scrolling')) {
+                    requestAnimationFrame(checkScroll);
+                } else if (!scrollEndDetected) {
+                    scrollEndDetected = true;
+                    // Additional delay for dynamic content
+                    setTimeout(resolve, 200);
+                }
+            };
+            
+            // Add scrolling class
+            document.documentElement.classList.add('scrolling');
+            
+            // Start checking scroll state
+            requestAnimationFrame(checkScroll);
+            
+            // Fallback timeout in case scroll event doesn't fire
+            setTimeout(() => {
+                document.documentElement.classList.remove('scrolling');
+                resolve();
+            }, 1000);
+        });
 
-        // Capture current frame
+        // Remove scrolling class
+        document.documentElement.classList.remove('scrolling');
+
+        // Capture frame after scroll has settled
         await captureFrame(rect);
 
         const maxScroll = captureConfig.direction === 'vertical' 
@@ -172,31 +205,47 @@ async function startScrollCapture(rect) {
             return;
         }
 
-        // Schedule next scroll
-        requestAnimationFrame(() => setTimeout(simulateScroll, captureConfig.captureInterval));
+        // Use requestAnimationFrame for next scroll
+        requestAnimationFrame(simulateScroll);
     };
 
     // Start the scrolling process
-    simulateScroll();
+    requestAnimationFrame(simulateScroll);
 }
 
+// Add scroll event listener to track scroll state
+document.addEventListener('scroll', () => {
+    document.documentElement.classList.add('scrolling');
+    clearTimeout(window.scrollTimeout);
+    window.scrollTimeout = setTimeout(() => {
+        document.documentElement.classList.remove('scrolling');
+    }, 100);
+}, { passive: true });
+
 function captureFrame(rect) {
-    const frameData = {
-        area: {
-            x: rect.left + window.scrollX,
-            y: rect.top + window.scrollY,
-            width: rect.width,
-            height: rect.height,
-            devicePixelRatio: window.devicePixelRatio,
-            scrollX: window.scrollX,
-            scrollY: window.scrollY
-        }
-    };
-    
-    frames.push(frameData);
-    chrome.runtime.sendMessage({ 
-        action: 'captureFrame',
-        frameData: frameData
+    return new Promise((resolve) => {
+        const frameData = {
+            area: {
+                x: rect.left + window.scrollX,
+                y: rect.top + window.scrollY,
+                width: rect.width,
+                height: rect.height,
+                devicePixelRatio: window.devicePixelRatio,
+                scrollX: window.scrollX,
+                scrollY: window.scrollY
+            }
+        };
+        
+        frames.push(frameData);
+        
+        // Send message and wait for response before resolving
+        chrome.runtime.sendMessage({ 
+            action: 'captureFrame',
+            frameData: frameData
+        }, () => {
+            // Resolve after getting response from background script
+            resolve();
+        });
     });
 }
 
@@ -207,17 +256,21 @@ async function finishCapture(rect) {
     // Restore original scroll position
     window.scrollTo(lastScrollPosition.x, lastScrollPosition.y);
 
-    // Send all frames for processing
-    chrome.runtime.sendMessage({
-        action: 'processCapturedFrames',
-        frames: frames,
-        config: {
-            direction: captureConfig.direction,
-            overlap: captureConfig.overlap,
-            totalWidth: rect.width,
-            totalHeight: rect.height,
-            devicePixelRatio: window.devicePixelRatio
-        }
+    // Send all frames for processing and wait for response
+    await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+            action: 'processCapturedFrames',
+            frames: frames,
+            config: {
+                direction: captureConfig.direction,
+                overlap: captureConfig.overlap,
+                totalWidth: rect.width,
+                totalHeight: rect.height,
+                devicePixelRatio: window.devicePixelRatio
+            }
+        }, () => {
+            resolve();
+        });
     });
 
     cleanup();

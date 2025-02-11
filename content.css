@@ -5,7 +5,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.2);
-  z-index: 999999;
+  z-index: 2147483646;  /* Just below the maximum z-index */
   cursor: crosshair;
 }
 
@@ -17,7 +17,7 @@
 
 .capture-controls {
   position: fixed;
-  z-index: 999999;
+  z-index: 2147483647;  /* Maximum z-index */
   background: white;
   padding: 10px;
   border-radius: 4px;
@@ -47,10 +47,16 @@
 
 .scroll-container {
   position: fixed;
-  z-index: 999998;
+  z-index: 2147483645;  /* Just below selection overlay */
   background: rgba(33, 150, 243, 0.1);
   border: 2px solid #2196F3;
   cursor: ns-resize;
   pointer-events: none;
   transition: all 0.3s ease;
+}
+
+.hide-for-capture {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }

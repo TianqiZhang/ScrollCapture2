@@ -3,11 +3,13 @@ let currentCaptureId = null;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'captureFrame') {
-        handleFrameCapture(request.frameData, sender.tab.id);
-        return true;
+        handleFrameCapture(request.frameData, sender.tab.id)
+            .then(() => sendResponse()); // Send response after capture is done
+        return true; // Indicate we will send response asynchronously
     } else if (request.action === 'processCapturedFrames') {
-        processFrames(request.frames, request.config, sender.tab.id);
-        return true;
+        processFrames(request.frames, request.config, sender.tab.id)
+            .then(() => sendResponse()); // Send response after processing is done
+        return true; // Indicate we will send response asynchronously
     } else if (request.action === 'capture') {
         chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
             // Create a bitmap from the data URL
@@ -49,12 +51,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 });
             };
             reader.readAsDataURL(newBlob);
+            sendResponse(); // Send response after capture is complete
         });
+        return true; // Indicate we will send response asynchronously
     }
     return true;
 });
 
 async function handleFrameCapture(frameData, tabId) {
+    // Add a small delay to ensure UI elements are fully hidden
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     // Capture the visible tab
     chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
         const frame = {
